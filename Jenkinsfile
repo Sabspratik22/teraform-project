@@ -1,32 +1,23 @@
 pipeline {
-
     agent {
-        label 'slave-agent'
+        label 'agent-server'
+    }
+
+    parameters {
+        choice(
+            name: 'ACTION',
+            choices: ['APPLY', 'DESTROY'],
+            description: 'Choose Terraform Action'
+        )
     }
 
     environment {
         AWS_DEFAULT_REGION = 'eu-north-1'
     }
 
-    stages {
-
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
         stage('Terraform Init') {
             steps {
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding',
-                     credentialsId: 'aws-creds']
-                ]) {
-
-                    sh '''
-                    terraform init
-                    '''
-                }
+                sh 'terraform init'
             }
         }
 
@@ -37,37 +28,40 @@ pipeline {
         }
 
         stage('Terraform Plan') {
+            when {
+                expression { params.ACTION == 'APPLY' }
+            }
             steps {
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding',
-                     credentialsId: 'aws-creds']
-                ]) {
-
-                    sh '''
-                    terraform plan -out=tfplan
-                    '''
-                }
+                sh 'terraform plan -out=tfplan'
             }
         }
 
-        stage('Terraform Apply') {
+        stage('Build Infrastructure') {
+            when {
+                expression { params.ACTION == 'APPLY' }
+            }
             steps {
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding',
-                     credentialsId: 'aws-creds']
-                ]) {
+                sh 'terraform apply -auto-approve tfplan'
+            }
+        }
 
-                    sh '''
-                    terraform apply -auto-approve tfplan
-                    '''
-                }
+        stage('Destroy Infrastructure') {
+            when {
+                expression { params.ACTION == 'DESTROY' }
+            }
+            steps {
+                sh 'terraform destroy -auto-approve'
             }
         }
     }
 
     post {
         success {
-            echo 'Infrastructure Created Successfully'
+            echo "Terraform ${params.ACTION} completed successfully."
+        }
+
+        failure {
+            echo "Terraform ${params.ACTION} failed."
         }
     }
 }
