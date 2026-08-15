@@ -11,11 +11,6 @@ pipeline {
         )
     }
 
-    environment {
-       
-        SSH_KEY = '/home/ubuntu/abc.pem'
-    }
-
     stages {
 
         stage('Checkout Code') {
@@ -37,36 +32,28 @@ pipeline {
         }
 
         stage('Terraform Plan') {
-            when {
-                expression { params.ACTION == 'APPLY' }
-            }
+            when { expression { params.ACTION == 'APPLY' } }
             steps {
                 sh 'terraform plan -out=tfplan'
             }
         }
 
         stage('Terraform Apply') {
-            when {
-                expression { params.ACTION == 'APPLY' }
-            }
+            when { expression { params.ACTION == 'APPLY' } }
             steps {
                 sh 'terraform apply -auto-approve tfplan'
             }
         }
 
         stage('Wait For EC2') {
-            when {
-                expression { params.ACTION == 'APPLY' }
-            }
+            when { expression { params.ACTION == 'APPLY' } }
             steps {
-                sh 'sleep 60'  // Adjust sleep duration if needed to wait for EC2 to be ready
+                sh 'sleep 60'
             }
         }
 
         stage('Get EC2 IP') {
-            when {
-                expression { params.ACTION == 'APPLY' }
-            }
+            when { expression { params.ACTION == 'APPLY' } }
             steps {
                 script {
                     env.EC2_IP = sh(
@@ -78,28 +65,18 @@ pipeline {
             }
         }
 
-        stage('Create Ansible Inventory') {
-            when {
-                expression { params.ACTION == 'APPLY' }
-            }
+        stage('Ansible Setup and Run') {
+            when { expression { params.ACTION == 'APPLY' } }
             steps {
-                sh """
-                cat > inventory.ini <<EOF
+                withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'SSH_KEY_FILE')]) {
+                    sh """
+                    cat > inventory.ini <<EOF
 [servers]
-${EC2_IP} ansible_user=ubuntu ansible_ssh_private_key_file=${SSH_KEY} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+${EC2_IP} ansible_user=ubuntu ansible_ssh_private_key_file=${SSH_KEY_FILE} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 EOF
-                cat inventory.ini
-                """
-            }
-        }
+                    cat inventory.ini
 
-        stage('Create Ansible Playbook') {
-            when {
-                expression { params.ACTION == 'APPLY' }
-            }
-            steps {
-                sh '''
-                cat > java-install.yml <<EOF
+                    cat > java-install.yml <<'EOF'
 ---
 - name: Install Java 21
   hosts: servers
@@ -123,32 +100,16 @@ EOF
     - debug:
         var: java_output.stderr_lines
 EOF
-                '''
-            }
-        }
 
-        stage('Install Java Using Ansible') {
-            when {
-                expression { params.ACTION == 'APPLY' }
-            }
-            steps {
-                sh 'ansible-playbook -i inventory.ini java-install.yml'
-            }
-        }
-
-        stage('Verify Java') {
-            when {
-                expression { params.ACTION == 'APPLY' }
-            }
-            steps {
-                sh 'ansible -i inventory.ini servers -m shell -a "java -version"'
+                    ansible-playbook -i inventory.ini java-install.yml
+                    ansible -i inventory.ini servers -m shell -a "java -version"
+                    """
+                }
             }
         }
 
         stage('Destroy Infrastructure') {
-            when {
-                expression { params.ACTION == 'DESTROY' }
-            }
+            when { expression { params.ACTION == 'DESTROY' } }
             steps {
                 sh 'terraform destroy -auto-approve'
             }
