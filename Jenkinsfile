@@ -79,34 +79,39 @@ pipeline {
                 }
             }
         }
-
-        stage('Create Ansible Inventory') {
-            when {
-                expression { params.ACTION == 'APPLY' }
-            }
-            steps {
-                sh """
-                cat > inventory.ini <<EOF
+stage('Create Ansible Inventory') {
+    when {
+        expression { params.ACTION == 'APPLY' }
+    }
+    steps {
+        sh """
+        cat > inventory.ini <<EOF
 [servers]
-${EC2_IP} ansible_user=ubuntu ansible_ssh_private_key_file=${SSH_KEY}
+${EC2_IP} ansible_user=ubuntu ansible_ssh_private_key_file=${SSH_KEY} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 EOF
 
-                cat inventory.ini
-                """
-            }
-        }
+        cat inventory.ini
+        """
+    }
+}
 
-        stage('Test Ansible Connectivity') {
-            when {
-                expression { params.ACTION == 'APPLY' }
-            }
-            steps {
-                sh '''
-                ansible all -i inventory.ini -m ping
-                '''
-            }
-        }
+        stage('Create Ansible Inventory') {
+    when {
+        expression { params.ACTION == 'APPLY' }
+    }
+    steps {
+        sh """
+        cat > inventory.ini <<EOF
+[servers]
+${EC2_IP} ansible_user=ubuntu ansible_ssh_private_key_file=${SSH_KEY} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+EOF
 
+        cat inventory.ini
+        """
+    }
+}
+
+    
         stage('Create Ansible Playbook') {
             when {
                 expression { params.ACTION == 'APPLY' }
