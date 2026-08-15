@@ -146,7 +146,6 @@ resource "aws_instance" "server" {
     volume_type = "gp3"
   }
 }
-```
 
 Replace your existing **EC2 Instance** section with the above block. The extra closing braces (`}`) have been removed and all attributes are now correctly placed inside the `aws_instance` resource.
 
