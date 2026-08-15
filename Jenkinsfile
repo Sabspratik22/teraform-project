@@ -13,7 +13,7 @@ pipeline {
 
     environment {
         AWS_DEFAULT_REGION = 'eu-north-1'
-        SSH_KEY = '/home/ubuntu/terraform-key.pem'
+        SSH_KEY = '/home/ubuntu/abc.pem'
     }
 
     stages {
