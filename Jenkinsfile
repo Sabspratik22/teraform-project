@@ -20,8 +20,7 @@ pipeline {
 
         stage('Checkout Code') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/Sabspratik22/teraform-project.git'
+                git branch: 'main', url: 'https://github.com/Sabspratik22/teraform-project.git'
             }
         }
 
@@ -60,7 +59,7 @@ pipeline {
                 expression { params.ACTION == 'APPLY' }
             }
             steps {
-                sh 'sleep 60'
+                sh 'sleep 60'  // Adjust sleep duration if needed to wait for EC2 to be ready
             }
         }
 
@@ -74,44 +73,26 @@ pipeline {
                         script: 'terraform output -raw public_ip',
                         returnStdout: true
                     ).trim()
-
                     echo "EC2 Public IP: ${env.EC2_IP}"
                 }
             }
         }
-stage('Create Ansible Inventory') {
-    when {
-        expression { params.ACTION == 'APPLY' }
-    }
-    steps {
-        sh """
-        cat > inventory.ini <<EOF
-[servers]
-${EC2_IP} ansible_user=ubuntu ansible_ssh_private_key_file=${SSH_KEY} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
-EOF
-
-        cat inventory.ini
-        """
-    }
-}
 
         stage('Create Ansible Inventory') {
-    when {
-        expression { params.ACTION == 'APPLY' }
-    }
-    steps {
-        sh """
-        cat > inventory.ini <<EOF
+            when {
+                expression { params.ACTION == 'APPLY' }
+            }
+            steps {
+                sh """
+                cat > inventory.ini <<EOF
 [servers]
 ${EC2_IP} ansible_user=ubuntu ansible_ssh_private_key_file=${SSH_KEY} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 EOF
+                cat inventory.ini
+                """
+            }
+        }
 
-        cat inventory.ini
-        """
-    }
-}
-
-    
         stage('Create Ansible Playbook') {
             when {
                 expression { params.ACTION == 'APPLY' }
@@ -125,7 +106,6 @@ EOF
   become: yes
 
   tasks:
-
     - name: Update apt cache
       apt:
         update_cache: yes
@@ -152,9 +132,7 @@ EOF
                 expression { params.ACTION == 'APPLY' }
             }
             steps {
-                sh '''
-                ansible-playbook -i inventory.ini java-install.yml
-                '''
+                sh 'ansible-playbook -i inventory.ini java-install.yml'
             }
         }
 
@@ -163,11 +141,7 @@ EOF
                 expression { params.ACTION == 'APPLY' }
             }
             steps {
-                sh '''
-                ansible -i inventory.ini servers \
-                -m shell \
-                -a "java -version"
-                '''
+                sh 'ansible -i inventory.ini servers -m shell -a "java -version"'
             }
         }
 
@@ -182,15 +156,12 @@ EOF
     }
 
     post {
-
         success {
             echo "Terraform ${params.ACTION} completed successfully."
         }
-
         failure {
             echo "Terraform ${params.ACTION} failed."
         }
-
         always {
             echo "Pipeline execution finished."
         }
