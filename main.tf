@@ -129,7 +129,8 @@ resource "aws_instance" "server" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   subnet_id              = aws_subnet.public.id
-  key_name = "terraform-key"
+  key_name      = "my-existing-key"
+}
   
 
   vpc_security_group_ids = [
