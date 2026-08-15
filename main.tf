@@ -1,7 +1,3 @@
-####################
-# VPC
-####################
-
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true
@@ -10,10 +6,6 @@ resource "aws_vpc" "main" {
     Name = "jenkins-vpc"
   }
 }
-
-####################
-# Public Subnet
-####################
 
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.main.id
@@ -26,10 +18,6 @@ resource "aws_subnet" "public" {
   }
 }
 
-####################
-# Internet Gateway
-####################
-
 resource "aws_internet_gateway" "gw" {
   vpc_id = aws_vpc.main.id
 
@@ -37,10 +25,6 @@ resource "aws_internet_gateway" "gw" {
     Name = "jenkins-igw"
   }
 }
-
-####################
-# Route Table
-####################
 
 resource "aws_route_table" "public_rt" {
   vpc_id = aws_vpc.main.id
@@ -55,18 +39,10 @@ resource "aws_route_table" "public_rt" {
   }
 }
 
-####################
-# Route Association
-####################
-
 resource "aws_route_table_association" "assoc" {
   subnet_id      = aws_subnet.public.id
   route_table_id = aws_route_table.public_rt.id
 }
-
-####################
-# Security Group
-####################
 
 resource "aws_security_group" "web_sg" {
   name   = "web-sg"
@@ -74,21 +50,17 @@ resource "aws_security_group" "web_sg" {
 
   ingress {
     description = "SSH"
-
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-
     cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
     description = "Application"
-
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
-
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -96,7 +68,6 @@ resource "aws_security_group" "web_sg" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -104,10 +75,6 @@ resource "aws_security_group" "web_sg" {
     Name = "web-sg"
   }
 }
-
-####################
-# Latest Ubuntu AMI
-####################
 
 data "aws_ami" "ubuntu" {
   most_recent = true
@@ -120,14 +87,7 @@ data "aws_ami" "ubuntu" {
   }
 }
 
-####################
-</hcl>
-####################
-# EC2 Instance
-####################
-
 resource "aws_instance" "server" {
-
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   subnet_id              = aws_subnet.public.id
@@ -145,11 +105,4 @@ resource "aws_instance" "server" {
     volume_size = 20
     volume_type = "gp3"
   }
-}
-Replace your existing **EC2 Instance** section with the above block. The extra closing braces (`}`) have been removed and all attributes are now correctly placed inside the `aws_instance` resource.
-
-root_block_device {
-  volume_size = 20
-  volume_type = "gp3"
-}
 }
