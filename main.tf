@@ -91,7 +91,7 @@ resource "aws_instance" "server" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   subnet_id              = aws_subnet.public.id
-  key_name               = "my-existing-key"
+  key_name               = "key-id"
 
   vpc_security_group_ids = [
     aws_security_group.web_sg.id
