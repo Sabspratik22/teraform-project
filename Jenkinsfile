@@ -68,7 +68,7 @@ pipeline {
         stage('Ansible Setup and Run') {
             when { expression { params.ACTION == 'APPLY' } }
             steps {
-                withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'SSH_KEY_FILE')]) {
+                withCredentials([sshUserPrivateKey(credentialsId: 'key-id', keyFileVariable: 'SSH_KEY_FILE')]) {
                     sh """
                     cat > inventory.ini <<EOF
 [servers]
