@@ -139,4 +139,9 @@ resource "aws_instance" "server" {
   tags = {
     Name = "terraform-server"
   }
+
+root_block_device {
+  volume_size = 20
+  volume_type = "gp3"
+}
 }
