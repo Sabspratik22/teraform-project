@@ -121,7 +121,7 @@ data "aws_ami" "ubuntu" {
 }
 
 ####################
-'''hcl
+</hcl>
 ####################
 # EC2 Instance
 ####################
@@ -131,7 +131,7 @@ resource "aws_instance" "server" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   subnet_id              = aws_subnet.public.id
-  key_name               = ""
+  key_name               = "my-existing-key"
 
   vpc_security_group_ids = [
     aws_security_group.web_sg.id
@@ -146,6 +146,7 @@ resource "aws_instance" "server" {
     volume_type = "gp3"
   }
 }
+}
 
 Replace your existing **EC2 Instance** section with the above block. The extra closing braces (`}`) have been removed and all attributes are now correctly placed inside the `aws_instance` resource.
 
@@ -153,4 +154,4 @@ root_block_device {
   volume_size = 20
   volume_type = "gp3"
 }
-
+}
