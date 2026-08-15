@@ -103,6 +103,6 @@ resource "aws_instance" "server" {
 
   root_block_device {
     volume_size = 20
-    volume_type = "gp3"
+  
   }
 }
