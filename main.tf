@@ -1,7 +1,6 @@
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true
-
   tags = {
     Name = "jenkins-vpc"
   }
@@ -12,7 +11,6 @@ resource "aws_subnet" "public" {
   cidr_block              = "10.0.1.0/24"
   availability_zone       = "us-east-2c"
   map_public_ip_on_launch = true
-
   tags = {
     Name = "public-subnet"
   }
@@ -20,7 +18,6 @@ resource "aws_subnet" "public" {
 
 resource "aws_internet_gateway" "gw" {
   vpc_id = aws_vpc.main.id
-
   tags = {
     Name = "jenkins-igw"
   }
@@ -28,12 +25,10 @@ resource "aws_internet_gateway" "gw" {
 
 resource "aws_route_table" "public_rt" {
   vpc_id = aws_vpc.main.id
-
   route {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.gw.id
   }
-
   tags = {
     Name = "public-rt"
   }
@@ -78,9 +73,7 @@ resource "aws_security_group" "web_sg" {
 
 data "aws_ami" "ubuntu" {
   most_recent = true
-
-  owners = ["099720109477"]
-
+  owners      = ["099720109477"]
   filter {
     name   = "name"
     values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
@@ -92,17 +85,49 @@ resource "aws_instance" "server" {
   instance_type          = var.instance_type
   subnet_id              = aws_subnet.public.id
   key_name               = "abc"
-
   vpc_security_group_ids = [
     aws_security_group.web_sg.id
   ]
-
   tags = {
     Name = "terraform-server"
   }
-
   root_block_device {
     volume_size = 20
-  
   }
+}
+
+resource "aws_ecr_repository" "app_repo" {
+  name                 = "my-app-repo"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true   # allows terraform destroy even if images exist in the repo
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Environment = "dev"
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_ecr_lifecycle_policy" "app_repo_policy" {
+  repository = aws_ecr_repository.app_repo.name
+
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep only last 10 images"
+        selection = {
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
+          countNumber = 10
+        }
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
 }
