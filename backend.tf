@@ -2,7 +2,7 @@ terraform {
   backend "s3" {
     bucket         = "my-project-terraform-state-bucket"   # replace with your bootstrapped bucket name
     key            = "jenkins-infra/terraform.tfstate"
-    region         = "us-east-2"
+   
     dynamodb_table = "terraform-state-lock"
     encrypt        = true
   }
@@ -15,6 +15,3 @@ terraform {
   }
 }
 
-provider "aws" {
-  region = "us-east-2"
-}
