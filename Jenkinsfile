@@ -11,6 +11,13 @@ pipeline {
         )
     }
 
+    environment {
+        AWS_REGION     = 'us-east-2'
+        ECR_REPO_NAME  = 'my-app-repo'
+        AWS_ACCOUNT_ID = '425034746613'   // replace with your real AWS account ID
+        IMAGE_TAG      = "${BUILD_NUMBER}"
+    }
+
     stages {
 
         stage('Checkout Code') {
@@ -21,27 +28,47 @@ pipeline {
 
         stage('Terraform Init') {
             steps {
-                sh 'terraform init'
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-ecr-creds'
+                ]]) {
+                    sh 'terraform init -input=false -reconfigure'
+                }
             }
         }
 
         stage('Terraform Validate') {
             steps {
-                sh 'terraform validate'
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-ecr-creds'
+                ]]) {
+                    sh 'terraform validate'
+                }
             }
         }
 
         stage('Terraform Plan') {
             when { expression { params.ACTION == 'APPLY' } }
             steps {
-                sh 'terraform plan -out=tfplan'
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-ecr-creds'
+                ]]) {
+                    sh 'terraform plan -out=tfplan'
+                }
             }
         }
 
         stage('Terraform Apply') {
             when { expression { params.ACTION == 'APPLY' } }
             steps {
-                sh 'terraform apply -auto-approve tfplan'
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-ecr-creds'
+                ]]) {
+                    sh 'terraform apply -auto-approve tfplan'
+                }
             }
         }
 
@@ -55,12 +82,17 @@ pipeline {
         stage('Get EC2 IP') {
             when { expression { params.ACTION == 'APPLY' } }
             steps {
-                script {
-                    env.EC2_IP = sh(
-                        script: 'terraform output -raw public_ip',
-                        returnStdout: true
-                    ).trim()
-                    echo "EC2 Public IP: ${env.EC2_IP}"
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-ecr-creds'
+                ]]) {
+                    script {
+                        env.EC2_IP = sh(
+                            script: 'terraform output -raw public_ip',
+                            returnStdout: true
+                        ).trim()
+                        echo "EC2 Public IP: ${env.EC2_IP}"
+                    }
                 }
             }
         }
@@ -68,7 +100,7 @@ pipeline {
         stage('Ansible Setup and Run') {
             when { expression { params.ACTION == 'APPLY' } }
             steps {
-                withCredentials([sshUserPrivateKey(credentialsId: 'key-id', keyFileVariable: 'SSH_KEY_FILE')]) {
+                withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'SSH_KEY_FILE')]) {
                     sh """
                     cat > inventory.ini <<EOF
 [servers]
@@ -108,23 +140,83 @@ EOF
             }
         }
 
-        stage('Destroy Infrastructure') {
+        stage('ECR Login') {
+            when { expression { params.ACTION == 'APPLY' } }
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-ecr-creds'
+                ]]) {
+                    sh """
+                    aws ecr get-login-password --region ${AWS_REGION} | \
+                    docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                    """
+                }
+            }
+        }
+
+        stage('Docker Build') {
+            when { expression { params.ACTION == 'APPLY' } }
+            steps {
+                sh """
+                docker build -t ${ECR_REPO_NAME}:${IMAGE_TAG} .
+                docker tag ${ECR_REPO_NAME}:${IMAGE_TAG} ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG}
+                docker tag ${ECR_REPO_NAME}:${IMAGE_TAG} ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:latest
+                """
+            }
+        }
+
+        stage('Docker Push to ECR') {
+            when { expression { params.ACTION == 'APPLY' } }
+            steps {
+                sh """
+                docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG}
+                docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:latest
+                """
+            }
+        }
+
+        stage('Destroy Plan') {
             when { expression { params.ACTION == 'DESTROY' } }
             steps {
-                sh 'terraform destroy -auto-approve'
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-ecr-creds'
+                ]]) {
+                    sh 'terraform plan -destroy -out=destroy.tfplan'
+                }
+            }
+        }
+
+        stage('Confirm Destroy') {
+            when { expression { params.ACTION == 'DESTROY' } }
+            steps {
+                input message: "Confirm DESTROY of infrastructure? This cannot be undone.", ok: "Yes, destroy it"
+            }
+        }
+
+        stage('Terraform Destroy') {
+            when { expression { params.ACTION == 'DESTROY' } }
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-ecr-creds'
+                ]]) {
+                    sh 'terraform apply -auto-approve destroy.tfplan'
+                }
             }
         }
     }
 
     post {
         success {
-            echo "Terraform ${params.ACTION} completed successfully."
+            echo "Pipeline ${params.ACTION} completed successfully."
         }
         failure {
-            echo "Terraform ${params.ACTION} failed."
+            echo "Pipeline ${params.ACTION} failed."
         }
         always {
-            echo "Pipeline execution finished."
+            sh 'docker system prune -f || true'
         }
     }
 }
