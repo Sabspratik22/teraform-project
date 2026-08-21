@@ -96,8 +96,8 @@ resource "aws_instance" "server" {
   }
 }
 
-resource "aws_ecr_repository" "app_repo" {
-  name                 = "my-app-repo"
+resource "aws_ecr_repository" "app_repos" {
+  name                 = "my-app-repos"
   image_tag_mutability = "MUTABLE"
   force_delete         = true   # allows terraform destroy even if images exist in the repo
 
