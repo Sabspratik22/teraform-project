@@ -92,6 +92,6 @@ resource "aws_instance" "server" {
     Name = "terraform-server"
   }
   root_block_device {
-    volume_size = 20
+    volume_size = 35
   }
 }
