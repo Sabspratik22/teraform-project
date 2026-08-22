@@ -14,7 +14,7 @@ pipeline {
     environment {
         AWS_REGION     = 'us-east-2'
         ECR_REPO_NAME  = 'my-app-repo'
-        AWS_ACCOUNT_ID = '425034746613'   // replace with your real AWS account ID
+        AWS_ACCOUNT_ID = '425034746613'
         IMAGE_TAG      = "${BUILD_NUMBER}"
     }
 
@@ -23,6 +23,18 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 git branch: 'main', url: 'https://github.com/Sabspratik22/teraform-project.git'
+            }
+        }
+
+        stage('Pre-build Cleanup') {
+            steps {
+                sh '''
+                echo "Disk usage before cleanup:"
+                df -h /
+                docker system prune -af --volumes || true
+                echo "Disk usage after cleanup:"
+                df -h /
+                '''
             }
         }
 
@@ -72,13 +84,6 @@ pipeline {
             }
         }
 
-        stage('Wait For EC2') {
-            when { expression { params.ACTION == 'APPLY' } }
-            steps {
-                sh 'sleep 60'
-            }
-        }
-
         stage('Get EC2 IP') {
             when { expression { params.ACTION == 'APPLY' } }
             steps {
@@ -93,6 +98,27 @@ pipeline {
                         ).trim()
                         echo "EC2 Public IP: ${env.EC2_IP}"
                     }
+                }
+            }
+        }
+
+        stage('Wait For SSH Ready') {
+            when { expression { params.ACTION == 'APPLY' } }
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: 'key-id', keyFileVariable: 'SSH_KEY_FILE')]) {
+                    sh """
+                    echo "Waiting for SSH on \${EC2_IP}..."
+                    for i in \$(seq 1 20); do
+                        if ssh -i "\$SSH_KEY_FILE" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 ubuntu@${EC2_IP} 'echo connected' 2>/dev/null; then
+                            echo "SSH is up"
+                            exit 0
+                        fi
+                        echo "Attempt \$i failed, retrying in 10s..."
+                        sleep 10
+                    done
+                    echo "SSH never became available"
+                    exit 1
+                    """
                 }
             }
         }
@@ -216,7 +242,7 @@ EOF
             echo "Pipeline ${params.ACTION} failed."
         }
         always {
-            sh 'docker system prune -f || true'
+            sh 'docker system prune -af --volumes || true'
         }
     }
 }
